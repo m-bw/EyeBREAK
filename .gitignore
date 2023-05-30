@@ -1,0 +1,9 @@
+*.DS_Store
+.vscode
+**/__pycache__
+**/managed_components
+**/build
+**/sdkconfig
+**/sdkconfig.old
+**/dependencies.lock
+.cache/

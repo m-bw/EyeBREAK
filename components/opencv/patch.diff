@@ -1,0 +1,733 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index fd47d83a2c..0bf4f9e00c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -213,6 +213,7 @@ endif()
+ # OpenCV cmake options
+ # ----------------------------------------------------------------------------
+ 
++OCV_OPTION(ESP32 "Compilation for esp32 target" OFF)
+ OCV_OPTION(OPENCV_ENABLE_NONFREE "Enable non-free algorithms" OFF)
+ 
+ # 3rd party libs
+@@ -547,6 +548,12 @@ OCV_OPTION(OPENCV_SEMIHOSTING         "Build the library for semihosting target
+ OCV_OPTION(ENABLE_PYLINT              "Add target with Pylint checks"                            (BUILD_DOCS OR BUILD_EXAMPLES) IF (NOT CMAKE_CROSSCOMPILING AND NOT APPLE_FRAMEWORK) )
+ OCV_OPTION(ENABLE_FLAKE8              "Add target with Python flake8 checker"                    (BUILD_DOCS OR BUILD_EXAMPLES) IF (NOT CMAKE_CROSSCOMPILING AND NOT APPLE_FRAMEWORK) )
+ 
++# Add preprocessor definition seen by the code sources
++if(ESP32)
++  message(STATUS "Enabled ESP32 target specific build")
++  add_definitions(-DESP32)
++endif()
++
+ if(ENABLE_IMPL_COLLECTION)
+   add_definitions(-DCV_COLLECT_IMPL_DATA)
+ endif()
+diff --git a/modules/calib3d/src/chessboard.cpp b/modules/calib3d/src/chessboard.cpp
+index 1801a1cbf4..16f8dd8c2e 100644
+--- a/modules/calib3d/src/chessboard.cpp
++++ b/modules/calib3d/src/chessboard.cpp
+@@ -459,6 +459,8 @@ void FastX::calcFeatureMap(const Mat &images,Mat& out)const
+     }
+ }
+ 
++#pragma GCC push_options
++#pragma GCC optimize ("-O0")
+ std::vector<std::vector<float> > FastX::calcAngles(const std::vector<cv::Mat> &rotated_images,std::vector<cv::KeyPoint> &keypoints)const
+ {
+     // validate rotated_images
+@@ -572,6 +574,7 @@ std::vector<std::vector<float> > FastX::calcAngles(const std::vector<cv::Mat> &r
+     });
+     return angles;
+ }
++#pragma GCC pop_options
+ 
+ void FastX::findKeyPoints(const std::vector<cv::Mat> &feature_maps, std::vector<KeyPoint>& keypoints,const Mat& _mask) const
+ {
+diff --git a/modules/core/include/opencv2/core/cvstd_wrapper.hpp b/modules/core/include/opencv2/core/cvstd_wrapper.hpp
+index 25e0041f28..ac077bc079 100644
+--- a/modules/core/include/opencv2/core/cvstd_wrapper.hpp
++++ b/modules/core/include/opencv2/core/cvstd_wrapper.hpp
+@@ -8,7 +8,10 @@
+ #include "opencv2/core/cvdef.h"
+ 
+ #include <string>
++#pragma GCC push_options
++#pragma GCC optimize ("-O0")
+ #include <memory>  // std::shared_ptr
++#pragma GCC pop_options
+ #include <type_traits>  // std::enable_if
+ 
+ namespace cv {
+diff --git a/modules/core/include/opencv2/core/hal/intrin.hpp b/modules/core/include/opencv2/core/hal/intrin.hpp
+index ee8310b5c5..2e45a3aa04 100644
+--- a/modules/core/include/opencv2/core/hal/intrin.hpp
++++ b/modules/core/include/opencv2/core/hal/intrin.hpp
+@@ -62,7 +62,7 @@
+ #define OPENCV_HAL_1ST(a, b) (a)
+ 
+ namespace {
+-inline unsigned int trailingZeros32(unsigned int value) {
++inline uint32_t trailingZeros32(uint32_t value) {
+ #if defined(_MSC_VER)
+ #if (_MSC_VER < 1700) || defined(_M_ARM) || defined(_M_ARM64)
+     unsigned long index = 0;
+@@ -81,7 +81,7 @@ inline unsigned int trailingZeros32(unsigned int value) {
+ #elif defined(__clang__)
+     return llvm.cttz.i32(value, true);
+ #else
+-    static const int MultiplyDeBruijnBitPosition[32] = {
++    static const int32_t MultiplyDeBruijnBitPosition[32] = {
+         0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+         31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9 };
+     return MultiplyDeBruijnBitPosition[((uint32_t)((value & -value) * 0x077CB531U)) >> 27];
+@@ -161,12 +161,12 @@ template<typename _Tp> struct V_TypeTraits
+         } \
+     }
+ 
+-CV_INTRIN_DEF_TYPE_TRAITS(uchar, schar, uchar, uchar, ushort, unsigned, unsigned);
+-CV_INTRIN_DEF_TYPE_TRAITS(schar, schar, uchar, uchar, short, int, int);
+-CV_INTRIN_DEF_TYPE_TRAITS(ushort, short, ushort, ushort, unsigned, uint64, unsigned);
+-CV_INTRIN_DEF_TYPE_TRAITS(short, short, ushort, ushort, int, int64, int);
+-CV_INTRIN_DEF_TYPE_TRAITS_NO_Q_TYPE(unsigned, int, unsigned, unsigned, uint64, unsigned);
+-CV_INTRIN_DEF_TYPE_TRAITS_NO_Q_TYPE(int, int, unsigned, unsigned, int64, int);
++CV_INTRIN_DEF_TYPE_TRAITS(uchar, schar, uchar, uchar, ushort, uint32_t, uint32_t);
++CV_INTRIN_DEF_TYPE_TRAITS(schar, schar, uchar, uchar, short, int32_t, int32_t);
++CV_INTRIN_DEF_TYPE_TRAITS(ushort, short, ushort, ushort, uint32_t, uint64, uint32_t);
++CV_INTRIN_DEF_TYPE_TRAITS(short, short, ushort, ushort, int32_t, int64, int32_t);
++CV_INTRIN_DEF_TYPE_TRAITS_NO_Q_TYPE(uint32_t, int32_t, uint32_t, uint32_t, uint64, uint32_t);
++CV_INTRIN_DEF_TYPE_TRAITS_NO_Q_TYPE(int32_t, int32_t, uint32_t, uint32_t, int64, int32_t);
+ CV_INTRIN_DEF_TYPE_TRAITS_NO_Q_TYPE(float, int, unsigned, float, double, float);
+ CV_INTRIN_DEF_TYPE_TRAITS_NO_Q_TYPE(uint64, int64, uint64, uint64, void, uint64);
+ CV_INTRIN_DEF_TYPE_TRAITS_NO_Q_TYPE(int64, int64, uint64, uint64, void, int64);
+@@ -594,8 +594,8 @@ namespace CV__SIMD_NAMESPACE {
+     inline v_int8 vx_load(const schar * ptr) { return VXPREFIX(_load)(ptr); }
+     inline v_uint16 vx_load(const ushort * ptr) { return VXPREFIX(_load)(ptr); }
+     inline v_int16 vx_load(const short * ptr) { return VXPREFIX(_load)(ptr); }
+-    inline v_int32 vx_load(const int * ptr) { return VXPREFIX(_load)(ptr); }
+-    inline v_uint32 vx_load(const unsigned * ptr) { return VXPREFIX(_load)(ptr); }
++    inline v_int32 vx_load(const int32_t * ptr) { return VXPREFIX(_load)(ptr); }
++    inline v_uint32 vx_load(const uint32_t * ptr) { return VXPREFIX(_load)(ptr); }
+     inline v_float32 vx_load(const float * ptr) { return VXPREFIX(_load)(ptr); }
+     inline v_int64 vx_load(const int64 * ptr) { return VXPREFIX(_load)(ptr); }
+     inline v_uint64 vx_load(const uint64 * ptr) { return VXPREFIX(_load)(ptr); }
+@@ -611,8 +611,8 @@ namespace CV__SIMD_NAMESPACE {
+     inline v_int8 vx_load_aligned(const schar * ptr) { return VXPREFIX(_load_aligned)(ptr); }
+     inline v_uint16 vx_load_aligned(const ushort * ptr) { return VXPREFIX(_load_aligned)(ptr); }
+     inline v_int16 vx_load_aligned(const short * ptr) { return VXPREFIX(_load_aligned)(ptr); }
+-    inline v_int32 vx_load_aligned(const int * ptr) { return VXPREFIX(_load_aligned)(ptr); }
+-    inline v_uint32 vx_load_aligned(const unsigned * ptr) { return VXPREFIX(_load_aligned)(ptr); }
++    inline v_int32 vx_load_aligned(const int32_t * ptr) { return VXPREFIX(_load_aligned)(ptr); }
++    inline v_uint32 vx_load_aligned(const uint32_t * ptr) { return VXPREFIX(_load_aligned)(ptr); }
+     inline v_float32 vx_load_aligned(const float * ptr) { return VXPREFIX(_load_aligned)(ptr); }
+     inline v_int64 vx_load_aligned(const int64 * ptr) { return VXPREFIX(_load_aligned)(ptr); }
+     inline v_uint64 vx_load_aligned(const uint64 * ptr) { return VXPREFIX(_load_aligned)(ptr); }
+@@ -628,8 +628,8 @@ namespace CV__SIMD_NAMESPACE {
+     inline v_int8 vx_load_low(const schar * ptr) { return VXPREFIX(_load_low)(ptr); }
+     inline v_uint16 vx_load_low(const ushort * ptr) { return VXPREFIX(_load_low)(ptr); }
+     inline v_int16 vx_load_low(const short * ptr) { return VXPREFIX(_load_low)(ptr); }
+-    inline v_int32 vx_load_low(const int * ptr) { return VXPREFIX(_load_low)(ptr); }
+-    inline v_uint32 vx_load_low(const unsigned * ptr) { return VXPREFIX(_load_low)(ptr); }
++    inline v_int32 vx_load_low(const int32_t * ptr) { return VXPREFIX(_load_low)(ptr); }
++    inline v_uint32 vx_load_low(const uint32_t * ptr) { return VXPREFIX(_load_low)(ptr); }
+     inline v_float32 vx_load_low(const float * ptr) { return VXPREFIX(_load_low)(ptr); }
+     inline v_int64 vx_load_low(const int64 * ptr) { return VXPREFIX(_load_low)(ptr); }
+     inline v_uint64 vx_load_low(const uint64 * ptr) { return VXPREFIX(_load_low)(ptr); }
+@@ -645,8 +645,8 @@ namespace CV__SIMD_NAMESPACE {
+     inline v_int8 vx_load_halves(const schar * ptr0, const schar * ptr1) { return VXPREFIX(_load_halves)(ptr0, ptr1); }
+     inline v_uint16 vx_load_halves(const ushort * ptr0, const ushort * ptr1) { return VXPREFIX(_load_halves)(ptr0, ptr1); }
+     inline v_int16 vx_load_halves(const short * ptr0, const short * ptr1) { return VXPREFIX(_load_halves)(ptr0, ptr1); }
+-    inline v_int32 vx_load_halves(const int * ptr0, const int * ptr1) { return VXPREFIX(_load_halves)(ptr0, ptr1); }
+-    inline v_uint32 vx_load_halves(const unsigned * ptr0, const unsigned * ptr1) { return VXPREFIX(_load_halves)(ptr0, ptr1); }
++    inline v_int32 vx_load_halves(const int32_t * ptr0, const int32_t * ptr1) { return VXPREFIX(_load_halves)(ptr0, ptr1); }
++    inline v_uint32 vx_load_halves(const uint32_t * ptr0, const uint32_t * ptr1) { return VXPREFIX(_load_halves)(ptr0, ptr1); }
+     inline v_float32 vx_load_halves(const float * ptr0, const float * ptr1) { return VXPREFIX(_load_halves)(ptr0, ptr1); }
+     inline v_int64 vx_load_halves(const int64 * ptr0, const int64 * ptr1) { return VXPREFIX(_load_halves)(ptr0, ptr1); }
+     inline v_uint64 vx_load_halves(const uint64 * ptr0, const uint64 * ptr1) { return VXPREFIX(_load_halves)(ptr0, ptr1); }
+@@ -662,8 +662,8 @@ namespace CV__SIMD_NAMESPACE {
+     inline v_int8 vx_lut(const schar * ptr, const int* idx) { return VXPREFIX(_lut)(ptr, idx); }
+     inline v_uint16 vx_lut(const ushort * ptr, const int* idx) { return VXPREFIX(_lut)(ptr, idx); }
+     inline v_int16 vx_lut(const short* ptr, const int* idx) { return VXPREFIX(_lut)(ptr, idx); }
+-    inline v_int32 vx_lut(const int* ptr, const int* idx) { return VXPREFIX(_lut)(ptr, idx); }
+-    inline v_uint32 vx_lut(const unsigned* ptr, const int* idx) { return VXPREFIX(_lut)(ptr, idx); }
++    inline v_int32 vx_lut(const int32_t* ptr, const int* idx) { return VXPREFIX(_lut)(ptr, idx); }
++    inline v_uint32 vx_lut(const uint32_t* ptr, const int* idx) { return VXPREFIX(_lut)(ptr, idx); }
+     inline v_float32 vx_lut(const float* ptr, const int* idx) { return VXPREFIX(_lut)(ptr, idx); }
+     inline v_int64 vx_lut(const int64 * ptr, const int* idx) { return VXPREFIX(_lut)(ptr, idx); }
+     inline v_uint64 vx_lut(const uint64 * ptr, const int* idx) { return VXPREFIX(_lut)(ptr, idx); }
+@@ -679,8 +679,8 @@ namespace CV__SIMD_NAMESPACE {
+     inline v_int8 vx_lut_pairs(const schar * ptr, const int* idx) { return VXPREFIX(_lut_pairs)(ptr, idx); }
+     inline v_uint16 vx_lut_pairs(const ushort * ptr, const int* idx) { return VXPREFIX(_lut_pairs)(ptr, idx); }
+     inline v_int16 vx_lut_pairs(const short* ptr, const int* idx) { return VXPREFIX(_lut_pairs)(ptr, idx); }
+-    inline v_int32 vx_lut_pairs(const int* ptr, const int* idx) { return VXPREFIX(_lut_pairs)(ptr, idx); }
+-    inline v_uint32 vx_lut_pairs(const unsigned* ptr, const int* idx) { return VXPREFIX(_lut_pairs)(ptr, idx); }
++    inline v_int32 vx_lut_pairs(const int32_t* ptr, const int* idx) { return VXPREFIX(_lut_pairs)(ptr, idx); }
++    inline v_uint32 vx_lut_pairs(const uint32_t* ptr, const int* idx) { return VXPREFIX(_lut_pairs)(ptr, idx); }
+     inline v_float32 vx_lut_pairs(const float* ptr, const int* idx) { return VXPREFIX(_lut_pairs)(ptr, idx); }
+     inline v_int64 vx_lut_pairs(const int64 * ptr, const int* idx) { return VXPREFIX(_lut_pairs)(ptr, idx); }
+     inline v_uint64 vx_lut_pairs(const uint64 * ptr, const int* idx) { return VXPREFIX(_lut_pairs)(ptr, idx); }
+@@ -696,8 +696,8 @@ namespace CV__SIMD_NAMESPACE {
+     inline v_int8 vx_lut_quads(const schar* ptr, const int* idx) { return VXPREFIX(_lut_quads)(ptr, idx); }
+     inline v_uint16 vx_lut_quads(const ushort* ptr, const int* idx) { return VXPREFIX(_lut_quads)(ptr, idx); }
+     inline v_int16 vx_lut_quads(const short* ptr, const int* idx) { return VXPREFIX(_lut_quads)(ptr, idx); }
+-    inline v_int32 vx_lut_quads(const int* ptr, const int* idx) { return VXPREFIX(_lut_quads)(ptr, idx); }
+-    inline v_uint32 vx_lut_quads(const unsigned* ptr, const int* idx) { return VXPREFIX(_lut_quads)(ptr, idx); }
++    inline v_int32 vx_lut_quads(const int32_t* ptr, const int* idx) { return VXPREFIX(_lut_quads)(ptr, idx); }
++    inline v_uint32 vx_lut_quads(const uint32_t* ptr, const int* idx) { return VXPREFIX(_lut_quads)(ptr, idx); }
+     inline v_float32 vx_lut_quads(const float* ptr, const int* idx) { return VXPREFIX(_lut_quads)(ptr, idx); }
+     //! @}
+ 
+@@ -708,8 +708,8 @@ namespace CV__SIMD_NAMESPACE {
+     inline v_int16 vx_load_expand(const schar * ptr) { return VXPREFIX(_load_expand)(ptr); }
+     inline v_uint32 vx_load_expand(const ushort * ptr) { return VXPREFIX(_load_expand)(ptr); }
+     inline v_int32 vx_load_expand(const short* ptr) { return VXPREFIX(_load_expand)(ptr); }
+-    inline v_int64 vx_load_expand(const int* ptr) { return VXPREFIX(_load_expand)(ptr); }
+-    inline v_uint64 vx_load_expand(const unsigned* ptr) { return VXPREFIX(_load_expand)(ptr); }
++    inline v_int64 vx_load_expand(const int32_t* ptr) { return VXPREFIX(_load_expand)(ptr); }
++    inline v_uint64 vx_load_expand(const uint32_t* ptr) { return VXPREFIX(_load_expand)(ptr); }
+     inline v_float32 vx_load_expand(const float16_t * ptr) { return VXPREFIX(_load_expand)(ptr); }
+     //! @}
+ 
+@@ -727,7 +727,7 @@ namespace CV__SIMD_NAMESPACE {
+     // Compatibility layer
+ 
+     template<typename T> struct VTraits {
+-        static inline int vlanes() { return T::nlanes; }
++        static inline int32_t vlanes() { return T::nlanes; }
+         enum { nlanes = T::nlanes, max_nlanes = T::nlanes };
+         using lane_type = typename T::lane_type;
+     };
+diff --git a/modules/core/include/opencv2/core/hal/intrin_cpp.hpp b/modules/core/include/opencv2/core/hal/intrin_cpp.hpp
+index e9a09d12ae..9a9f17ad5a 100644
+--- a/modules/core/include/opencv2/core/hal/intrin_cpp.hpp
++++ b/modules/core/include/opencv2/core/hal/intrin_cpp.hpp
+@@ -494,9 +494,9 @@ typedef v_reg<ushort, 8> v_uint16x8;
+ /** @brief Eight 16-bit signed integer values */
+ typedef v_reg<short, 8> v_int16x8;
+ /** @brief Four 32-bit unsigned integer values */
+-typedef v_reg<unsigned, 4> v_uint32x4;
++typedef v_reg<uint32_t, 4> v_uint32x4;
+ /** @brief Four 32-bit signed integer values */
+-typedef v_reg<int, 4> v_int32x4;
++typedef v_reg<int32_t, 4> v_int32x4;
+ /** @brief Four 32-bit floating point values (single precision) */
+ typedef v_reg<float, 4> v_float32x4;
+ /** @brief Two 64-bit floating point values (double precision) */
+@@ -623,8 +623,8 @@ __CV_EXPAND(macro_name(uchar, __VA_ARGS__)) \
+ __CV_EXPAND(macro_name(schar, __VA_ARGS__)) \
+ __CV_EXPAND(macro_name(ushort, __VA_ARGS__)) \
+ __CV_EXPAND(macro_name(short, __VA_ARGS__)) \
+-__CV_EXPAND(macro_name(unsigned, __VA_ARGS__)) \
+-__CV_EXPAND(macro_name(int, __VA_ARGS__)) \
++__CV_EXPAND(macro_name(uint32_t, __VA_ARGS__)) \
++__CV_EXPAND(macro_name(int32_t, __VA_ARGS__)) \
+ __CV_EXPAND(macro_name(uint64, __VA_ARGS__)) \
+ __CV_EXPAND(macro_name(int64, __VA_ARGS__)) \
+ 
+@@ -2531,7 +2531,7 @@ template<int n> inline v_reg<int, n*2> v_trunc(const v_reg<double, n>& a)
+ /** @brief Convert to float
+ 
+ Supported input type is cv::v_int32. */
+-template<int n> inline v_reg<float, n> v_cvt_f32(const v_reg<int, n>& a)
++template<int n> inline v_reg<float, n> v_cvt_f32(const v_reg<int32_t, n>& a)
+ {
+     v_reg<float, n> c;
+     for( int i = 0; i < n; i++ )
+@@ -2570,7 +2570,7 @@ template<int n> inline v_reg<float, n*2> v_cvt_f32(const v_reg<double, n>& a, co
+ /** @brief Convert lower half to double
+ 
+ Supported input type is cv::v_int32. */
+-template<int n> CV_INLINE v_reg<double, n/2> v_cvt_f64(const v_reg<int, n>& a)
++template<int n> CV_INLINE v_reg<double, n/2> v_cvt_f64(const v_reg<int32_t, n>& a)
+ {
+     v_reg<double, (n/2)> c;
+     for( int i = 0; i < (n/2); i++ )
+@@ -2581,7 +2581,7 @@ template<int n> CV_INLINE v_reg<double, n/2> v_cvt_f64(const v_reg<int, n>& a)
+ /** @brief Convert to double high part of vector
+ 
+ Supported input type is cv::v_int32. */
+-template<int n> CV_INLINE v_reg<double, (n/2)> v_cvt_f64_high(const v_reg<int, n>& a)
++template<int n> CV_INLINE v_reg<double, (n/2)> v_cvt_f64_high(const v_reg<int32_t, n>& a)
+ {
+     v_reg<double, (n/2)> c;
+     for( int i = 0; i < (n/2); i++ )
+@@ -3008,12 +3008,12 @@ template<int shift, int n> inline v_reg<_Tpn, 2*n> v_rshr_##pack_suffix(const v_
+ //! @note All variants except 64-bit use saturation.
+ OPENCV_HAL_IMPL_C_RSHR_PACK(ushort, uchar, pack, saturate_cast)
+ OPENCV_HAL_IMPL_C_RSHR_PACK(short, schar, pack, saturate_cast)
+-OPENCV_HAL_IMPL_C_RSHR_PACK(unsigned, ushort, pack, saturate_cast)
+-OPENCV_HAL_IMPL_C_RSHR_PACK(int, short, pack, saturate_cast)
+-OPENCV_HAL_IMPL_C_RSHR_PACK(uint64, unsigned, pack, static_cast)
+-OPENCV_HAL_IMPL_C_RSHR_PACK(int64, int, pack, static_cast)
++OPENCV_HAL_IMPL_C_RSHR_PACK(uint32_t, ushort, pack, saturate_cast)
++OPENCV_HAL_IMPL_C_RSHR_PACK(int32_t, short, pack, saturate_cast)
++OPENCV_HAL_IMPL_C_RSHR_PACK(uint64, uint32_t, pack, static_cast)
++OPENCV_HAL_IMPL_C_RSHR_PACK(int64, int32_t, pack, static_cast)
+ OPENCV_HAL_IMPL_C_RSHR_PACK(short, uchar, pack_u, saturate_cast)
+-OPENCV_HAL_IMPL_C_RSHR_PACK(int, ushort, pack_u, saturate_cast)
++OPENCV_HAL_IMPL_C_RSHR_PACK(int32_t, ushort, pack_u, saturate_cast)
+ //! @}
+ 
+ //! @brief Helper macro
+diff --git a/modules/core/include/opencv2/core/saturate.hpp b/modules/core/include/opencv2/core/saturate.hpp
+index e0cc965ab6..36ce8019c4 100644
+--- a/modules/core/include/opencv2/core/saturate.hpp
++++ b/modules/core/include/opencv2/core/saturate.hpp
+@@ -87,9 +87,17 @@ template<typename _Tp> static inline _Tp saturate_cast(ushort v)   { return _Tp(
+ template<typename _Tp> static inline _Tp saturate_cast(short v)    { return _Tp(v); }
+ /** @overload */
+ template<typename _Tp> static inline _Tp saturate_cast(unsigned v) { return _Tp(v); }
++#ifdef CV_INT32_T_IS_LONG_INT
++/** @overload */
++template<typename _Tp> static inline _Tp saturate_cast(unsigned long v) { return _Tp(v); }
++#endif
+ /** @overload */
+ template<typename _Tp> static inline _Tp saturate_cast(int v)      { return _Tp(v); }
+ /** @overload */
++#ifdef CV_INT32_T_IS_LONG_INT
++template<typename _Tp> static inline _Tp saturate_cast(long v)      { return _Tp(v); }
++/** @overload */
++#endif
+ template<typename _Tp> static inline _Tp saturate_cast(float v)    { return _Tp(v); }
+ /** @overload */
+ template<typename _Tp> static inline _Tp saturate_cast(double v)   { return _Tp(v); }
+@@ -101,8 +109,14 @@ template<typename _Tp> static inline _Tp saturate_cast(uint64 v)   { return _Tp(
+ template<> inline uchar saturate_cast<uchar>(schar v)        { return (uchar)std::max((int)v, 0); }
+ template<> inline uchar saturate_cast<uchar>(ushort v)       { return (uchar)std::min((unsigned)v, (unsigned)UCHAR_MAX); }
+ template<> inline uchar saturate_cast<uchar>(int v)          { return (uchar)((unsigned)v <= UCHAR_MAX ? v : v > 0 ? UCHAR_MAX : 0); }
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline uchar saturate_cast<uchar>(long v)         { return (uchar)((unsigned long)v <= UCHAR_MAX ? v : v > 0 ? UCHAR_MAX : 0); }
++#endif
+ template<> inline uchar saturate_cast<uchar>(short v)        { return saturate_cast<uchar>((int)v); }
+ template<> inline uchar saturate_cast<uchar>(unsigned v)     { return (uchar)std::min(v, (unsigned)UCHAR_MAX); }
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline uchar saturate_cast<uchar>(unsigned long v){ return (uchar)std::min(v, (unsigned long)UCHAR_MAX); }
++#endif
+ template<> inline uchar saturate_cast<uchar>(float v)        { int iv = cvRound(v); return saturate_cast<uchar>(iv); }
+ template<> inline uchar saturate_cast<uchar>(double v)       { int iv = cvRound(v); return saturate_cast<uchar>(iv); }
+ template<> inline uchar saturate_cast<uchar>(int64 v)        { return (uchar)((uint64)v <= (uint64)UCHAR_MAX ? v : v > 0 ? UCHAR_MAX : 0); }
+@@ -111,8 +125,14 @@ template<> inline uchar saturate_cast<uchar>(uint64 v)       { return (uchar)std
+ template<> inline schar saturate_cast<schar>(uchar v)        { return (schar)std::min((int)v, SCHAR_MAX); }
+ template<> inline schar saturate_cast<schar>(ushort v)       { return (schar)std::min((unsigned)v, (unsigned)SCHAR_MAX); }
+ template<> inline schar saturate_cast<schar>(int v)          { return (schar)((unsigned)(v-SCHAR_MIN) <= (unsigned)UCHAR_MAX ? v : v > 0 ? SCHAR_MAX : SCHAR_MIN); }
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline schar saturate_cast<schar>(long v)         { return (schar)((unsigned)(v-SCHAR_MIN) <= (unsigned)UCHAR_MAX ? v : v > 0 ? SCHAR_MAX : SCHAR_MIN); }
++#endif
+ template<> inline schar saturate_cast<schar>(short v)        { return saturate_cast<schar>((int)v); }
+ template<> inline schar saturate_cast<schar>(unsigned v)     { return (schar)std::min(v, (unsigned)SCHAR_MAX); }
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline schar saturate_cast<schar>(unsigned long v)     { return (schar)std::min(v, (unsigned long)SCHAR_MAX); }
++#endif
+ template<> inline schar saturate_cast<schar>(float v)        { int iv = cvRound(v); return saturate_cast<schar>(iv); }
+ template<> inline schar saturate_cast<schar>(double v)       { int iv = cvRound(v); return saturate_cast<schar>(iv); }
+ template<> inline schar saturate_cast<schar>(int64 v)        { return (schar)((uint64)((int64)v-SCHAR_MIN) <= (uint64)UCHAR_MAX ? v : v > 0 ? SCHAR_MAX : SCHAR_MIN); }
+@@ -121,7 +141,13 @@ template<> inline schar saturate_cast<schar>(uint64 v)       { return (schar)std
+ template<> inline ushort saturate_cast<ushort>(schar v)      { return (ushort)std::max((int)v, 0); }
+ template<> inline ushort saturate_cast<ushort>(short v)      { return (ushort)std::max((int)v, 0); }
+ template<> inline ushort saturate_cast<ushort>(int v)        { return (ushort)((unsigned)v <= (unsigned)USHRT_MAX ? v : v > 0 ? USHRT_MAX : 0); }
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline ushort saturate_cast<ushort>(long v)       { return (ushort)((unsigned)v <= (unsigned)USHRT_MAX ? v : v > 0 ? USHRT_MAX : 0); }
++#endif
+ template<> inline ushort saturate_cast<ushort>(unsigned v)   { return (ushort)std::min(v, (unsigned)USHRT_MAX); }
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline ushort saturate_cast<ushort>(unsigned long v) { return (ushort)std::min(v, (unsigned long)USHRT_MAX); }
++#endif
+ template<> inline ushort saturate_cast<ushort>(float v)      { int iv = cvRound(v); return saturate_cast<ushort>(iv); }
+ template<> inline ushort saturate_cast<ushort>(double v)     { int iv = cvRound(v); return saturate_cast<ushort>(iv); }
+ template<> inline ushort saturate_cast<ushort>(int64 v)      { return (ushort)((uint64)v <= (uint64)USHRT_MAX ? v : v > 0 ? USHRT_MAX : 0); }
+@@ -129,18 +155,36 @@ template<> inline ushort saturate_cast<ushort>(uint64 v)     { return (ushort)st
+ 
+ template<> inline short saturate_cast<short>(ushort v)       { return (short)std::min((int)v, SHRT_MAX); }
+ template<> inline short saturate_cast<short>(int v)          { return (short)((unsigned)(v - SHRT_MIN) <= (unsigned)USHRT_MAX ? v : v > 0 ? SHRT_MAX : SHRT_MIN); }
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline short saturate_cast<short>(long v)         { return (short)((unsigned)(v - SHRT_MIN) <= (unsigned)USHRT_MAX ? v : v > 0 ? SHRT_MAX : SHRT_MIN); }
++#endif
+ template<> inline short saturate_cast<short>(unsigned v)     { return (short)std::min(v, (unsigned)SHRT_MAX); }
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline short saturate_cast<short>(unsigned long v){ return (short)std::min(v, (unsigned long)SHRT_MAX); }
++#endif
+ template<> inline short saturate_cast<short>(float v)        { int iv = cvRound(v); return saturate_cast<short>(iv); }
+ template<> inline short saturate_cast<short>(double v)       { int iv = cvRound(v); return saturate_cast<short>(iv); }
+ template<> inline short saturate_cast<short>(int64 v)        { return (short)((uint64)((int64)v - SHRT_MIN) <= (uint64)USHRT_MAX ? v : v > 0 ? SHRT_MAX : SHRT_MIN); }
+ template<> inline short saturate_cast<short>(uint64 v)       { return (short)std::min(v, (uint64)SHRT_MAX); }
+ 
+ template<> inline int saturate_cast<int>(unsigned v)         { return (int)std::min(v, (unsigned)INT_MAX); }
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline int saturate_cast<int>(unsigned long v)    { return (int)std::min(v, (unsigned long)INT_MAX); }
++#endif
+ template<> inline int saturate_cast<int>(int64 v)            { return (int)((uint64)(v - INT_MIN) <= (uint64)UINT_MAX ? v : v > 0 ? INT_MAX : INT_MIN); }
+ template<> inline int saturate_cast<int>(uint64 v)           { return (int)std::min(v, (uint64)INT_MAX); }
+ template<> inline int saturate_cast<int>(float v)            { return cvRound(v); }
+ template<> inline int saturate_cast<int>(double v)           { return cvRound(v); }
+ 
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline long saturate_cast<long>(unsigned v)         { return (long)std::min(v, (unsigned)INT_MAX); }
++template<> inline long saturate_cast<long>(unsigned long v)    { return (long)std::min(v, (unsigned long)INT_MAX); }
++template<> inline long saturate_cast<long>(int64 v)            { return (long)((uint64)(v - INT_MIN) <= (uint64)UINT_MAX ? v : v > 0 ? INT_MAX : INT_MIN); }
++template<> inline long saturate_cast<long>(uint64 v)           { return (long)std::min(v, (uint64)INT_MAX); }
++template<> inline long saturate_cast<long>(float v)            { return (long)cvRound(v); }
++template<> inline long saturate_cast<long>(double v)           { return (long)cvRound(v); }
++#endif // CV_INT32_T_IS_LONG_INT
++
+ template<> inline unsigned saturate_cast<unsigned>(schar v)  { return (unsigned)std::max(v, (schar)0); }
+ template<> inline unsigned saturate_cast<unsigned>(short v)  { return (unsigned)std::max(v, (short)0); }
+ template<> inline unsigned saturate_cast<unsigned>(int v)    { return (unsigned)std::max(v, (int)0); }
+@@ -150,9 +194,24 @@ template<> inline unsigned saturate_cast<unsigned>(uint64 v) { return (unsigned)
+ template<> inline unsigned saturate_cast<unsigned>(float v)  { return static_cast<unsigned>(cvRound(v)); }
+ template<> inline unsigned saturate_cast<unsigned>(double v) { return static_cast<unsigned>(cvRound(v)); }
+ 
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline unsigned long saturate_cast<unsigned long>(schar v)  { return (unsigned long)std::max(v, (schar)0); }
++template<> inline unsigned long saturate_cast<unsigned long>(short v)  { return (unsigned long)std::max(v, (short)0); }
++template<> inline unsigned long saturate_cast<unsigned long>(int v)    { return (unsigned long)std::max(v, (int)0); }
++template<> inline unsigned long saturate_cast<unsigned long>(long v)   { return (unsigned long)std::max(v, (long)0); }
++template<> inline unsigned long saturate_cast<unsigned long>(int64 v)  { return (unsigned long)((uint64)v <= (uint64)UINT_MAX ? v : v > 0 ? UINT_MAX : 0); }
++template<> inline unsigned long saturate_cast<unsigned long>(uint64 v) { return (unsigned long)std::min(v, (uint64)UINT_MAX); }
++// we intentionally do not clip negative numbers, to make -1 become 0xffffffff etc.
++template<> inline unsigned long saturate_cast<unsigned long>(float v)  { return static_cast<unsigned long>(cvRound(v)); }
++template<> inline unsigned long saturate_cast<unsigned long>(double v) { return static_cast<unsigned long>(cvRound(v)); }
++#endif //CV_INT32_T_IS_LONG_INT
++
+ template<> inline uint64 saturate_cast<uint64>(schar v)      { return (uint64)std::max(v, (schar)0); }
+ template<> inline uint64 saturate_cast<uint64>(short v)      { return (uint64)std::max(v, (short)0); }
+ template<> inline uint64 saturate_cast<uint64>(int v)        { return (uint64)std::max(v, (int)0); }
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline uint64 saturate_cast<uint64>(long v)       { return (uint64)std::max(v, (long)0); }
++#endif
+ template<> inline uint64 saturate_cast<uint64>(int64 v)      { return (uint64)std::max(v, (int64)0); }
+ 
+ template<> inline int64 saturate_cast<int64>(uint64 v)       { return (int64)std::min(v, (uint64)LLONG_MAX); }
+@@ -168,6 +227,10 @@ template<> inline float16_t saturate_cast<float16_t>(ushort v)  { return float16
+ template<> inline float16_t saturate_cast<float16_t>(short v)   { return float16_t((float)v); }
+ template<> inline float16_t saturate_cast<float16_t>(unsigned v){ return float16_t((float)v); }
+ template<> inline float16_t saturate_cast<float16_t>(int v)     { return float16_t((float)v); }
++#ifdef CV_INT32_T_IS_LONG_INT
++template<> inline float16_t saturate_cast<float16_t>(unsigned long v){ return float16_t((float)v); }
++template<> inline float16_t saturate_cast<float16_t>(long v)    { return float16_t((float)v); }
++#endif
+ template<> inline float16_t saturate_cast<float16_t>(uint64 v)  { return float16_t((float)v); }
+ template<> inline float16_t saturate_cast<float16_t>(int64 v)   { return float16_t((float)v); }
+ template<> inline float16_t saturate_cast<float16_t>(float v)   { return float16_t(v); }
+diff --git a/modules/core/include/opencv2/core/utility.hpp b/modules/core/include/opencv2/core/utility.hpp
+index db8c42976f..1047e80d0a 100644
+--- a/modules/core/include/opencv2/core/utility.hpp
++++ b/modules/core/include/opencv2/core/utility.hpp
+@@ -56,7 +56,10 @@
+ #include "opencv2/core.hpp"
+ #include <ostream>
+ 
++#pragma GCC push_options
++#pragma GCC optimize ("-O0")
+ #include <functional>
++#pragma GCC pop_options
+ 
+ #if !defined(_M_CEE)
+ #include <mutex>  // std::mutex, std::lock_guard
+diff --git a/modules/features2d/src/brisk.cpp b/modules/features2d/src/brisk.cpp
+index 59a86470f6..34443e2376 100644
+--- a/modules/features2d/src/brisk.cpp
++++ b/modules/features2d/src/brisk.cpp
+@@ -961,6 +961,8 @@ BriskScaleSpace::constructPyramid(const cv::Mat& image)
+   }
+ }
+ 
++#pragma GCC push_options
++#pragma GCC optimize ("-O0")
+ void
+ BriskScaleSpace::getKeypoints(const int threshold_, std::vector<cv::KeyPoint>& keypoints)
+ {
+@@ -1081,6 +1083,7 @@ BriskScaleSpace::getKeypoints(const int threshold_, std::vector<cv::KeyPoint>& k
+     }
+   }
+ }
++#pragma GCC pop_options
+ 
+ // interpolated score access with recalculation when needed:
+ inline int
+diff --git a/modules/imgproc/src/color.cpp b/modules/imgproc/src/color.cpp
+index cc4dd13c92..2b92455ed1 100644
+--- a/modules/imgproc/src/color.cpp
++++ b/modules/imgproc/src/color.cpp
+@@ -238,6 +238,7 @@ void cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
+             cvtColorYUV2BGR(_src, _dst, dcn, swapBlue(code), code == COLOR_YCrCb2BGR || code == COLOR_YCrCb2RGB);
+             break;
+ 
++#ifndef ESP32
+         case COLOR_BGR2XYZ:
+         case COLOR_RGB2XYZ:
+             cvtColorBGR2XYZ(_src, _dst, swapBlue(code));
+@@ -247,6 +248,7 @@ void cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
+         case COLOR_XYZ2RGB:
+             cvtColorXYZ2BGR(_src, _dst, dcn, swapBlue(code));
+             break;
++#endif
+ 
+         case COLOR_BGR2HSV: case COLOR_BGR2HSV_FULL:
+         case COLOR_RGB2HSV: case COLOR_RGB2HSV_FULL:
+@@ -268,6 +270,7 @@ void cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
+             cvtColorHLS2BGR(_src, _dst, dcn, swapBlue(code), isFullRangeHSV(code));
+             break;
+ 
++#ifndef ESP32
+         case COLOR_BGR2Lab: case COLOR_LBGR2Lab:
+         case COLOR_RGB2Lab: case COLOR_LRGB2Lab:
+             cvtColorBGR2Lab(_src, _dst, swapBlue(code), is_sRGB(code));
+@@ -287,6 +290,7 @@ void cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
+         case COLOR_Luv2RGB: case COLOR_Luv2LRGB:
+             cvtColorLuv2BGR(_src, _dst, dcn, swapBlue(code), is_sRGB(code));
+             break;
++#endif
+ 
+         case COLOR_BayerBG2GRAY: case COLOR_BayerGB2GRAY: case COLOR_BayerRG2GRAY: case COLOR_BayerGR2GRAY:
+         case COLOR_BayerBG2BGR: case COLOR_BayerGB2BGR: case COLOR_BayerRG2BGR: case COLOR_BayerGR2BGR:
+diff --git a/modules/imgproc/src/color.hpp b/modules/imgproc/src/color.hpp
+index abbd65ec06..7cd65ccf2b 100644
+--- a/modules/imgproc/src/color.hpp
++++ b/modules/imgproc/src/color.hpp
+@@ -536,12 +536,14 @@ bool oclCvtColorYUV2Gray_420( InputArray _src, OutputArray _dst );
+ 
+ #endif
+ 
++#ifndef ESP32
+ void cvtColorBGR2Lab( InputArray _src, OutputArray _dst, bool swapb, bool srgb);
+ void cvtColorBGR2Luv( InputArray _src, OutputArray _dst, bool swapb, bool srgb);
+ void cvtColorLab2BGR( InputArray _src, OutputArray _dst, int dcn, bool swapb, bool srgb );
+ void cvtColorLuv2BGR( InputArray _src, OutputArray _dst, int dcn, bool swapb, bool srgb );
+ void cvtColorBGR2XYZ( InputArray _src, OutputArray _dst, bool swapb );
+ void cvtColorXYZ2BGR( InputArray _src, OutputArray _dst, int dcn, bool swapb );
++#endif
+ 
+ void cvtColorBGR2YUV( InputArray _src, OutputArray _dst, bool swapb, bool crcb);
+ void cvtColorYUV2BGR( InputArray _src, OutputArray _dst, int dcn, bool swapb, bool crcb);
+diff --git a/modules/imgproc/src/color.simd_helpers.hpp b/modules/imgproc/src/color.simd_helpers.hpp
+index 47f00fda20..f211dfd2dc 100644
+--- a/modules/imgproc/src/color.simd_helpers.hpp
++++ b/modules/imgproc/src/color.simd_helpers.hpp
+@@ -135,7 +135,8 @@ public:
+         width(width_), cvt(_cvt)
+     {
+     }
+-
++#pragma GCC push_options
++#pragma GCC optimize ("-O0")
+     virtual void operator()(const Range& range) const CV_OVERRIDE
+     {
+         CV_TRACE_FUNCTION();
+@@ -146,6 +147,7 @@ public:
+         for( int i = range.start; i < range.end; ++i, yS += src_step, yD += dst_step )
+             cvt(reinterpret_cast<const _Tp*>(yS), reinterpret_cast<_Tp*>(yD), width);
+     }
++#pragma GCC pop_options
+ 
+ private:
+     const uchar * src_data;
+diff --git a/modules/imgproc/src/fixedpoint.inl.hpp b/modules/imgproc/src/fixedpoint.inl.hpp
+index f5f433fec6..064b5bf2b4 100644
+--- a/modules/imgproc/src/fixedpoint.inl.hpp
++++ b/modules/imgproc/src/fixedpoint.inl.hpp
+@@ -171,9 +171,9 @@ class fixedpoint32
+ private:
+     int32_t val;
+     fixedpoint32(int32_t _val) : val(_val) {}
+-    static CV_ALWAYS_INLINE uint32_t fixedround(const uint32_t& _val) { return (_val + ((1 << fixedShift) >> 1)); }
++    static CV_ALWAYS_INLINE uint32_t fixedround(const uint32_t& _val) { return (_val + (((uint32_t)1 << fixedShift) >> (uint32_t)1)); }
+ public:
+-    static const int fixedShift = 16;
++    static const int32_t fixedShift = 16;
+ 
+     typedef fixedpoint64 WT;
+     typedef int32_t raw_t;
+@@ -217,7 +217,7 @@ public:
+     CV_ALWAYS_INLINE operator int32_t() const { return saturate_cast<int32_t>(); }
+     CV_ALWAYS_INLINE bool isZero() { return val == 0; }
+     static CV_ALWAYS_INLINE fixedpoint32 zero() { return fixedpoint32(); }
+-    static CV_ALWAYS_INLINE fixedpoint32 one() { return fixedpoint32((1 << fixedShift)); }
++    static CV_ALWAYS_INLINE fixedpoint32 one() { return fixedpoint32(((int32_t)1 << fixedShift)); }
+     friend class fixedpoint16;
+ };
+ 
+@@ -228,7 +228,7 @@ private:
+     ufixedpoint32(uint32_t _val) : val(_val) {}
+     static CV_ALWAYS_INLINE uint32_t fixedround(const uint32_t& _val) { return (_val + ((1 << fixedShift) >> 1)); }
+ public:
+-    static const int fixedShift = 16;
++    static const int16_t fixedShift = 16;
+ 
+     typedef ufixedpoint64 WT;
+     typedef uint32_t raw_t;
+@@ -268,7 +268,7 @@ public:
+     CV_ALWAYS_INLINE operator int32_t() const { return saturate_cast<int32_t>(); }
+     CV_ALWAYS_INLINE bool isZero() { return val == 0; }
+     static CV_ALWAYS_INLINE ufixedpoint32 zero() { return ufixedpoint32(); }
+-    static CV_ALWAYS_INLINE ufixedpoint32 one() { return ufixedpoint32((1U << fixedShift)); }
++    static CV_ALWAYS_INLINE ufixedpoint32 one() { return ufixedpoint32(((uint32_t)1 << fixedShift)); }
+ 
+     static CV_ALWAYS_INLINE ufixedpoint32 fromRaw(uint32_t v) { return ufixedpoint32(v); }
+     CV_ALWAYS_INLINE uint32_t raw() { return val; }
+@@ -293,7 +293,7 @@ public:
+     CV_ALWAYS_INLINE fixedpoint16& operator = (const int8_t& _val) { val = ((int16_t)_val) << fixedShift; return *this; }
+     CV_ALWAYS_INLINE fixedpoint16& operator = (const cv::softdouble& _val) { val = (int16_t)cvRound(_val * cv::softdouble((1 << fixedShift))); return *this; }
+     CV_ALWAYS_INLINE fixedpoint16& operator = (const fixedpoint16& _val) { val = _val.val; return *this; }
+-    CV_ALWAYS_INLINE fixedpoint16 operator * (const int8_t& val2) const { return cv::saturate_cast<int16_t>((int32_t)val * val2); }
++    CV_ALWAYS_INLINE fixedpoint16 operator * (const int8_t& val2) const { return cv::saturate_cast<int16_t>((int)val * val2); }
+     CV_ALWAYS_INLINE fixedpoint32 operator * (const fixedpoint16& val2) const { return (int32_t)val * (int32_t)(val2.val); }
+     CV_ALWAYS_INLINE fixedpoint16 operator + (const fixedpoint16& val2) const
+     {
+@@ -341,7 +341,7 @@ public:
+     CV_ALWAYS_INLINE ufixedpoint16& operator = (const uint8_t& _val) { val = ((uint16_t)_val) << fixedShift; return *this; }
+     CV_ALWAYS_INLINE ufixedpoint16& operator = (const cv::softdouble& _val) { val = _val.getSign() ? 0 : (uint16_t)cvRound(_val * cv::softdouble((int32_t)(1 << fixedShift))); return *this; }
+     CV_ALWAYS_INLINE ufixedpoint16& operator = (const ufixedpoint16& _val) { val = _val.val; return *this; }
+-    CV_ALWAYS_INLINE ufixedpoint16 operator * (const uint8_t& val2) const { return cv::saturate_cast<uint16_t>((uint32_t)val * val2); }
++    CV_ALWAYS_INLINE ufixedpoint16 operator * (const uint8_t& val2) const { return cv::saturate_cast<uint16_t>((int32_t)val * val2); }
+     CV_ALWAYS_INLINE ufixedpoint32 operator * (const ufixedpoint16& val2) const { return ((uint32_t)val * (uint32_t)(val2.val)); }
+     CV_ALWAYS_INLINE ufixedpoint16 operator + (const ufixedpoint16& val2) const
+     {
+diff --git a/modules/imgproc/src/histogram.cpp b/modules/imgproc/src/histogram.cpp
+index 068dfd3a27..6e8b4f2057 100644
+--- a/modules/imgproc/src/histogram.cpp
++++ b/modules/imgproc/src/histogram.cpp
+@@ -1732,7 +1732,8 @@ calcSparseBackProj_( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas
+     }
+ }
+ 
+-
++#pragma GCC push_options
++#pragma GCC optimize ("-O0")
+ static void
+ calcSparseBackProj_8u( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
+                        Size imsize, const SparseMat& hist, int dims, const float** _ranges,
+@@ -1775,9 +1776,12 @@ calcSparseBackProj_8u( std::vector<uchar*>& _ptrs, const std::vector<int>& _delt
+             ptrs[i] += deltas[i*2 + 1];
+     }
+ }
++#pragma GCC pop_options
+ 
+ }
+ 
++#pragma GCC push_options
++#pragma GCC optimize ("-O0")
+ void cv::calcBackProject( const Mat* images, int nimages, const int* channels,
+                           const SparseMat& hist, OutputArray _backProject,
+                           const float** ranges, double scale, bool uniform )
+@@ -1812,7 +1816,7 @@ void cv::calcBackProject( const Mat* images, int nimages, const int* channels,
+     else
+         CV_Error(CV_StsUnsupportedFormat, "");
+ }
+-
++#pragma GCC pop_options
+ #ifdef HAVE_OPENCL
+ 
+ namespace cv {
+diff --git a/modules/imgproc/src/imgwarp.cpp b/modules/imgproc/src/imgwarp.cpp
+index be39419ed1..52252efc73 100644
+--- a/modules/imgproc/src/imgwarp.cpp
++++ b/modules/imgproc/src/imgwarp.cpp
+@@ -127,6 +127,42 @@ static bool IPPSet(const cv::Scalar &value, void *dataPointer, int step, IppiSiz
+ const int INTER_REMAP_COEF_BITS=15;
+ const int INTER_REMAP_COEF_SCALE=1 << INTER_REMAP_COEF_BITS;
+ 
++#ifdef ESP32
++/**
++ * Modifications for ESP32: These tables are taking too much space in dram0 segment which is limited
++ * in size. They are therefore initialized in heap at runtime
++ */
++
++static uchar *NNDeltaTab_i;
++
++static float *BilinearTab_f;
++static short *BilinearTab_i;
++
++static float *BicubicTab_f;
++static short *BicubicTab_i;
++
++static float *Lanczos4Tab_f;
++static short *Lanczos4Tab_i;
++
++// Modif ESP32: allocate buffers on heap. FIXME: changed access from 2 or 3 dimensions to 1 dimension. Need to find usages of these tables to modify access
++static bool tablesAllocated = false;
++static void allocateTables()
++{
++    NNDeltaTab_i = new uchar[INTER_TAB_SIZE2*2];
++
++    BilinearTab_f = new float[INTER_TAB_SIZE2*2*2];
++    BilinearTab_i = new short[INTER_TAB_SIZE2*2*2];
++
++    BicubicTab_f = new float[INTER_TAB_SIZE2*4*4];
++    BicubicTab_i = new short[INTER_TAB_SIZE2*4*4];
++
++    Lanczos4Tab_f = new float[INTER_TAB_SIZE2*8*8];
++    Lanczos4Tab_i = new short[INTER_TAB_SIZE2*8*8];
++
++    tablesAllocated = true;
++}
++
++#else
+ static uchar NNDeltaTab_i[INTER_TAB_SIZE2][2];
+ 
+ static float BilinearTab_f[INTER_TAB_SIZE2][2][2];
+@@ -142,6 +178,7 @@ static short BicubicTab_i[INTER_TAB_SIZE2][4][4];
+ 
+ static float Lanczos4Tab_f[INTER_TAB_SIZE2][8][8];
+ static short Lanczos4Tab_i[INTER_TAB_SIZE2][8][8];
++#endif
+ 
+ static inline void interpolateLinear( float x, float* coeffs )
+ {
+@@ -212,16 +249,19 @@ static void initInterTab1D(int method, float* tab, int tabsz)
+ 
+ static const void* initInterTab2D( int method, bool fixpt )
+ {
++    // Modif ESP32: allocate buffers on heap
++    if(!tablesAllocated)
++        allocateTables();
+     static bool inittab[INTER_MAX+1] = {false};
+     float* tab = 0;
+     short* itab = 0;
+     int ksize = 0;
+     if( method == INTER_LINEAR )
+-        tab = BilinearTab_f[0][0], itab = BilinearTab_i[0][0], ksize=2;
++        tab = &BilinearTab_f[0], itab = &BilinearTab_i[0], ksize=2;
+     else if( method == INTER_CUBIC )
+-        tab = BicubicTab_f[0][0], itab = BicubicTab_i[0][0], ksize=4;
++        tab = &BicubicTab_f[0], itab = &BicubicTab_i[0], ksize=4;
+     else if( method == INTER_LANCZOS4 )
+-        tab = Lanczos4Tab_f[0][0], itab = Lanczos4Tab_i[0][0], ksize=8;
++        tab = &Lanczos4Tab_f[0], itab = &Lanczos4Tab_i[0], ksize=8;
+     else
+         CV_Error( CV_StsBadArg, "Unknown/unsupported interpolation type" );
+ 
+@@ -234,8 +274,8 @@ static const void* initInterTab2D( int method, bool fixpt )
+             for( j = 0; j < INTER_TAB_SIZE; j++, tab += ksize*ksize, itab += ksize*ksize )
+             {
+                 int isum = 0;
+-                NNDeltaTab_i[i*INTER_TAB_SIZE+j][0] = j < INTER_TAB_SIZE/2;
+-                NNDeltaTab_i[i*INTER_TAB_SIZE+j][1] = i < INTER_TAB_SIZE/2;
++                NNDeltaTab_i[i*INTER_TAB_SIZE+j+0] = j < INTER_TAB_SIZE/2;
++                NNDeltaTab_i[i*INTER_TAB_SIZE+j+1] = i < INTER_TAB_SIZE/2;
+ 
+                 for( k1 = 0; k1 < ksize; k1++ )
+                 {
+@@ -1126,8 +1166,8 @@ public:
+                             for( x1 = 0; x1 < bcols; x1++ )
+                             {
+                                 int a = sA[x1] & (INTER_TAB_SIZE2-1);
+-                                XY[x1*2] = sXY[x1*2] + NNDeltaTab_i[a][0];
+-                                XY[x1*2+1] = sXY[x1*2+1] + NNDeltaTab_i[a][1];
++                                XY[x1*2] = sXY[x1*2] + NNDeltaTab_i[a+0];
++                                XY[x1*2+1] = sXY[x1*2+1] + NNDeltaTab_i[a+1];
+                             }
+                         }
+                     }
+diff --git a/modules/imgproc/src/resize.cpp b/modules/imgproc/src/resize.cpp
+index f7b39ca238..5342351054 100644
+--- a/modules/imgproc/src/resize.cpp
++++ b/modules/imgproc/src/resize.cpp
+@@ -3810,7 +3810,7 @@ void resize(int src_type,
+         resize_bitExact<schar, interpolationLinear<schar> >,
+         resize_bitExact<ushort, interpolationLinear<ushort> >,
+         resize_bitExact<short, interpolationLinear<short> >,
+-        resize_bitExact<int, interpolationLinear<int> >,
++        resize_bitExact<int32_t, interpolationLinear<int32_t> >,
+         0,
+         0,
+         0

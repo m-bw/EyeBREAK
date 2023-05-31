@@ -1,0 +1,16 @@
+on:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Build
+      uses: espressif/esp-idf-ci-action@v1
+      with:
+        esp_idf_version: latest
+        target: esp32
+        path: .
